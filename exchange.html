@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binance Mobile Testnet</title>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<style>
+html, body {margin:0; padding:0; width:100%; height:100%; font-family:Arial; background:#0b0e11; color:#eaecef;}
+#app {display:flex; flex-direction:column; height:100vh; width:100vw; overflow:hidden;}
+.header {display:flex; justify-content:space-between; align-items:center; padding:10px; background:#0b0e11; border-bottom:1px solid #1e2329; flex-shrink:0;}
+.header .logo {color:#fcd535; font-weight:bold;}
+.header select {background:#1e2329; border:none; color:white; padding:5px;}
+.market-list {display:flex; overflow-x:auto; border-bottom:1px solid #1e2329; flex-shrink:0;}
+.market-list div {min-width:80px; padding:10px; text-align:center; cursor:pointer; border-right:1px solid #1e2329; white-space:nowrap;}
+.market-list div.active {background:#161a1e;}
+.tabs {display:flex; justify-content:space-around; background:#0b0e11; border-bottom:1px solid #1e2329; flex-shrink:0;}
+.tabs button {flex:1; padding:10px 0; border:none; background:#0b0e11; color:white; font-weight:bold;}
+.tabs button.active {border-bottom:2px solid #fcd535;}
+.tab {display:none; flex-direction:column; height:calc(100vh - 130px); overflow:auto; flex:1;}
+.tab.active {display:flex;}
+#chart-container {flex:1;}
+.card {background:#161a1e; padding:10px; margin:10px; border-radius:6px;}
+input {width:100%; padding:10px; margin-top:8px; background:#1e2329; border:none; color:white; border-radius:4px;}
+.button-group {display:flex; justify-content:space-between; margin-top:10px;}
+.button-group button {flex:1; padding:10px; margin:0 2px; font-weight:bold; border:none; border-radius:4px;}
+.buy {background:#0ecb81;}
+.sell {background:#f6465d;}
+.bottom-panel {position:fixed; bottom:0; width:100%; padding:10px; background:#0b0e11; border-top:1px solid #1e2329; display:flex; justify-content:space-around; flex-shrink:0;}
+.bottom-panel div {flex:1; text-align:center; font-size:12px; color:#eaecef; cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- Header -->
+<div class="header">
+<div class="logo">TESTNET EXCHANGE</div>
+<select onchange="changeNetwork(this.value)">
+<option value="eth">ETH Testnet</option>
+<option value="sol">Solana Devnet</option>
+<option value="bnb">BNB Testnet</option>
+</select>
+</div>
+
+<!-- Market List -->
+<div class="market-list" id="marketList"></div>
+
+<!-- Tabs -->
+<div class="tabs">
+<button class="active" onclick="switchTab('chart')">Chart</button>
+<button onclick="switchTab('orderbook')">Order Book</button>
+<button onclick="switchTab('trades')">Trades</button>
+</div>
+
+<!-- Tab Contents -->
+<div id="chart" class="tab active">
+<div id="chart-container" style="height:100%;"></div>
+</div>
+<div id="orderbook" class="tab">
+<div class="orderbook" id="orderbookContent"></div>
+</div>
+<div id="trades" class="tab">
+<div class="trades" id="tradeHistory"></div>
+</div>
+
+<!-- Floating Buy/Sell Panel -->
+<div id="tradePanel" class="card" style="position:fixed;bottom:50px;width:95%;left:2.5%;display:none;">
+<div>Pair: <span id="pair">BTCUSDT</span></div>
+<div>Price: <span id="price"></span></div>
+<input id="amount" placeholder="Amount USD">
+<div class="button-group">
+<button class="buy" onclick="buy()">BUY</button>
+<button class="sell" onclick="sell()">SELL</button>
+</div>
+</div>
+
+<!-- Bottom Panel -->
+<div class="bottom-panel">
+<div onclick="toggleTradePanel()">Buy/Sell</div>
+<div>Balance: $<span id="balance">10000</span></div>
+</div>
+
+</div>
+
+<script>
+// Networks
+let networks={eth:{balance:10000}, sol:{balance:8000}, bnb:{balance:6000}};
+let currentNetwork='eth';
+let portfolio={};
+
+// Markets
+let markets=[{id:'bitcoin',symbol:'BTCUSDT'},{id:'ethereum',symbol:'ETHUSDT'},{id:'solana',symbol:'SOLUSDT'}];
+let currentMarket=markets[0];
+let price=0;
+
+// Load Markets
+function loadMarkets(){let html=''; markets.forEach((m,i)=>{html+=`<div class="${i===0?'active':''}" onclick="selectMarket(${i})">${m.symbol}</div>`;}); document.getElementById('marketList').innerHTML=html;}
+function selectMarket(i){currentMarket=markets[i]; document.getElementById('pair').innerText=currentMarket.symbol; updateMarketList(); loadPrice(); loadChart();}
+function updateMarketList(){let items=document.getElementById('marketList').children; for(let i=0;i<items.length;i++){items[i].classList.remove('active'); if(markets[i]===currentMarket) items[i].classList.add('active');}}
+
+// Tabs
+function switchTab(tab){let tabs=document.getElementsByClassName('tab'); for(let t of tabs) t.classList.remove('active'); document.getElementById(tab).classList.add('active'); let buttons=document.querySelectorAll('.tabs button'); for(let b of buttons) b.classList.remove('active'); event.target.classList.add('active');}
+
+// Trade Panel
+function toggleTradePanel(){let p=document.getElementById('tradePanel'); p.style.display=p.style.display==='none'?'block':'none';}
+
+// Change Network
+function changeNetwork(net){currentNetwork=net; document.getElementById('balance').innerText=networks[net].balance; portfolio={}; renderTrades();}
+
+// Load Chart
+function loadChart(){document.getElementById('chart-container').innerHTML=''; new TradingView.widget({container_id:'chart-container', autosize:true, symbol:'BINANCE:'+currentMarket.symbol, interval:'15', theme:'dark'});}
+
+// Load Price
+async function loadPrice(){let r=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${currentMarket.id}&vs_currencies=usd`); let d=await r.json(); price=d[currentMarket.id].usd; document.getElementById('price').innerText='$'+price;}
+
+// Buy/Sell
+function buy(){let usd=parseFloat(document.getElementById('amount').value); if(usd>networks[currentNetwork].balance) return alert('Insufficient balance'); let qty=usd/price; portfolio[currentMarket.symbol]=(portfolio[currentMarket.symbol]||0)+qty; networks[currentNetwork].balance-=usd; updateUI(); logTrade('BUY '+currentMarket.symbol+' $'+usd);}
+function sell(){let usd=parseFloat(document.getElementById('amount').value); let qty=usd/price; if(!portfolio[currentMarket.symbol]||portfolio[currentMarket.symbol]<qty) return alert('Not enough token'); portfolio[currentMarket.symbol]-=qty; networks[currentNetwork].balance+=usd; updateUI(); logTrade('SELL '+currentMarket.symbol+' $'+usd);}
+
+// Update UI
+function updateUI(){document.getElementById('balance').innerText=networks[currentNetwork].balance.toFixed(2); renderTrades();}
+function renderTrades(){let html=''; for(let c in portfolio){html+=c+' '+portfolio[c].toFixed(4)+'<br>';} document.getElementById('tradeHistory').innerHTML=html;}
+function logTrade(t){let h=document.getElementById('tradeHistory'); h.innerHTML=t+'<br>'+h.innerHTML;}
+
+// Orderbook
+function updateOrderbook(){let html=''; for(let i=0;i<20;i++){let p=(price+(Math.random()*50-25)).toFixed(2); let v=(Math.random()*5).toFixed(3); html+=p+' | '+v+'<br>';} document.getElementById('orderbookContent').innerHTML=html;}
+
+// Init
+loadMarkets(); selectMarket(0); setInterval(loadPrice,5000); setInterval(updateOrderbook,3000);
+
+</script>
+</body>
+</html>
